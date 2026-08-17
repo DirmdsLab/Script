@@ -37,6 +37,6 @@ mkdir -p \
     "$ROOT/Pictures/Wallpapers" \
     "$ROOT/Playlists" \
     "$ROOT/Videos/Records" \
-    "$ROOT/Videos/Wallpaper"
+    "$ROOT/Videos/Wallpapers"
 
 echo "Folder structure created successfully."
