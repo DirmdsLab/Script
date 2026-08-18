@@ -17,6 +17,7 @@ case "$TYPE" in
     internal)
         ROOT="$BASE_PATH"
         mkdir -p "$ROOT/.config"
+        mkdir -p "$ROOT/.local"
         ;;
     *)
         echo "Usage: $0 <external|internal> <path>"
