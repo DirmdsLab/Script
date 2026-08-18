@@ -32,6 +32,7 @@ mkdir -p \
     "$ROOT/File/Code" \
     "$ROOT/File/Software/App" \
     "$ROOT/File/Software/Game" \
+    "$ROOT/File/Software/Storage" \
     "$ROOT/File/Temp" \
     "$ROOT/Pictures/Screenshot" \
     "$ROOT/Pictures/Wallpapers" \
