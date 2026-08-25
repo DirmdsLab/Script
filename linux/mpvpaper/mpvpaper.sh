@@ -2,7 +2,7 @@
 
 # Patch
 PLAYLIST_DIR="$HOME/Playlists"
-VIDEO_DIR="$HOME/Videos/Wallpaper"
+VIDEO_DIR="$HOME/Videos/Wallpapers"
 SOCKET_PATH="/tmp/mpv-socket"
 OUTPUT_NAME="DP-1"
 
@@ -166,23 +166,164 @@ elif [[ "$1" == "wofiinput" ]]; then
     done
 
 else
-    
-    choice=$(printf "Playlist\nVideo" | wofi --dmenu --insensitive --prompt "Pilih sumber") || exit 1
 
-    if [[ "$choice" == "Playlist" ]]; then
+    choice=$(printf "📜 Playlist\n🎬 Video\n📂 Explorer Path\n⌨️ Input Path Manual" |
+        wofi --dmenu --insensitive --prompt "Pilih sumber") || exit 1
+
+    if [[ "$choice" == "📜 Playlist" ]]; then
+
         SELECTED=$(choose_media_file "$PLAYLIST_DIR" "playlist")
-        [[ $? -eq 2 ]] && exec "$0" 
-        [[ -z "$SELECTED" ]] && { echo "Batal menjalankan mpvpaper. Tidak ada playlist dipilih."; exit 0; }
+        RESULT=$?
+
+        [[ $RESULT -eq 2 ]] && exec "$0"
+        [[ -z "$SELECTED" ]] && {
+            echo "Batal menjalankan mpvpaper. Tidak ada playlist dipilih."
+            exit 0
+        }
+
         MPV_OPTS="$BASE_OPTS --loop --loop-playlist"
-    elif [[ "$choice" == "Video" ]]; then
+
+    elif [[ "$choice" == "🎬 Video" ]]; then
+
         SELECTED=$(choose_media_file "$VIDEO_DIR" "video")
-        [[ $? -eq 2 ]] && exec "$0"
-        [[ -z "$SELECTED" ]] && { echo "Batal menjalankan mpvpaper. Tidak ada video dipilih."; exit 0; }
+        RESULT=$?
+
+        [[ $RESULT -eq 2 ]] && exec "$0"
+        [[ -z "$SELECTED" ]] && {
+            echo "Batal menjalankan mpvpaper. Tidak ada video dipilih."
+            exit 0
+        }
+
         MPV_OPTS="$BASE_OPTS --loop"
+
+    elif [[ "$choice" == "📂 Explorer Path" ]]; then
+
+        # Explorer dimulai dari HOME
+        current_dir="$VIDEO_DIR"
+
+        while true; do
+
+            entries=("🔙 Kembali ke menu utama")
+
+            if [[ "$current_dir" != "$HOME" ]]; then
+                entries=("🔙 ../" "${entries[@]}")
+            fi
+
+            mapfile -t folders < <(
+                find -L "$current_dir" \
+                    -mindepth 1 -maxdepth 1 \
+                    -type d ! -name '.*' \
+                    -printf "%f/\n" | sort
+            )
+
+            for d in "${folders[@]}"; do
+                entries+=("📂 $d")
+            done
+
+            mapfile -t files < <(
+                find -L "$current_dir" \
+                    -mindepth 1 -maxdepth 1 \
+                    -type f ! -name '.*' \
+                    -printf "%f\n" | sort
+            )
+
+            for f in "${files[@]}"; do
+                case "$f" in
+                    *.m3u|*.M3U)
+                        entries+=("📜 $f")
+                        ;;
+                    *.mp4|*.MP4|*.mkv|*.MKV|*.webm|*.WEBM|*.avi|*.AVI|*.mov|*.MOV)
+                        entries+=("🎬 $f")
+                        ;;
+                esac
+            done
+
+            selected=$(
+                printf "%s\n" "${entries[@]}" |
+                wofi --dmenu --insensitive \
+                    --prompt "Explorer: $current_dir"
+            )
+
+            [[ -z "$selected" ]] && exit 0
+
+            clean_selected="${selected#* }"
+
+            if [[ "$clean_selected" == "Kembali ke menu utama" ]]; then
+
+                exec "$0"
+
+            elif [[ "$clean_selected" == "../" ]]; then
+
+                current_dir=$(dirname "$current_dir")
+
+            elif [[ "$clean_selected" == */ ]]; then
+
+                current_dir="$current_dir/${clean_selected%/}"
+
+            else
+
+                SELECTED="$current_dir/$clean_selected"
+                break
+
+            fi
+
+        done
+
+        case "$SELECTED" in
+
+            *.m3u|*.M3U)
+                MPV_OPTS="$BASE_OPTS --loop --loop-playlist"
+                ;;
+
+            *.mp4|*.MP4|*.mkv|*.MKV|*.webm|*.WEBM|*.avi|*.AVI|*.mov|*.MOV)
+                MPV_OPTS="$BASE_OPTS --loop"
+                ;;
+
+            *)
+                echo "Format file tidak didukung."
+                exit 1
+                ;;
+        esac
+
+    elif [[ "$choice" == "⌨️ Input Path Manual" ]]; then
+
+        INPUT_PATH=$(
+            wofi --dmenu --insensitive \
+                --prompt "Masukkan path lengkap file"
+        )
+
+        [[ -z "$INPUT_PATH" ]] && exit 0
+
+        [[ ! -f "$INPUT_PATH" ]] && {
+            echo "Path tidak valid: $INPUT_PATH"
+            exit 1
+        }
+
+        SELECTED="$INPUT_PATH"
+
+        case "$SELECTED" in
+
+            *.m3u|*.M3U)
+                MPV_OPTS="$BASE_OPTS --loop --loop-playlist"
+                ;;
+
+            *.mp4|*.MP4|*.mkv|*.MKV|*.webm|*.WEBM|*.avi|*.AVI|*.mov|*.MOV)
+                MPV_OPTS="$BASE_OPTS --loop"
+                ;;
+
+            *)
+                echo "Format file tidak didukung."
+                exit 1
+                ;;
+        esac
+
     else
+
         echo "Pilihan tidak valid."
         exit 0
+
     fi
+
 fi
 
 
