@@ -2,7 +2,7 @@
 
 PID_FILE="/tmp/wallpaper.pid"
 MONITOR="DP-1"
-VIDEO_DIR="$HOME/Videos/Wallpaper"
+VIDEO_DIR="$HOME/Videos/Wallpapers"
 
 # Cek apakah dipanggil dengan argumen
 if [[ "$1" == "videopath" && -n "$2" ]]; then
