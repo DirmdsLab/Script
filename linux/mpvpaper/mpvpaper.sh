@@ -7,7 +7,7 @@ SOCKET_PATH="/tmp/mpv-socket"
 OUTPUT_NAME="DP-1"
 
 # Base mpv options
-BASE_OPTS="--no-config --vf=scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080 volume=70 input-ipc-server=$SOCKET_PATH"
+BASE_OPTS="--no-config --vf=scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=60 volume=40 input-ipc-server=$SOCKET_PATH"
 
 
 
