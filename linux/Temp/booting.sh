@@ -4,6 +4,7 @@ LOG_FILE="/tmp/logscript-uwu.log"
 
 log() {
     echo "$1" | tee -a "$LOG_FILE"
+    notify-send "UwU Script" "$1"
 }
 
 sleep 1
