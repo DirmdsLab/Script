@@ -91,12 +91,6 @@ ydotool key 29:1 42:1 20:1 20:0 42:0 29:0
 
 sleep 1
 
-# Move to special workspace
-log "Move to special workspace"
-ydotool key 125:1 42:1 31:1 31:0 42:0 125:0
-
-sleep 1
-
 # Press Super + S
 log "Super + S"
 ydotool key 125:1 31:1 31:0 125:0
@@ -121,15 +115,10 @@ ydotool key 125:1 29:1 18:1 18:0 29:0 125:0
 
 sleep 3
 
-# Press Super + E
-log "Super + E"
-ydotool key 125:1 18:1 18:0 125:0
+# Press Super + C
+log "Super + C"
 
-sleep 1
-
-# Press Super + W
-log "Super + W"
-ydotool key 125:1 17:1 17:0 125:0
+ydotool key 125:1 46:1 46:0 125:0
 
 sleep 1
 

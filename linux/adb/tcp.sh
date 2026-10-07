@@ -1,103 +1,126 @@
 #!/usr/bin/env bash
 
-# Step 1: Get list of connected devices
-devices=($(adb devices | grep -w "device" | awk '{print $1}'))
+# Get the list of connected Android devices
+mapfile -t devices < <(
+    adb devices | awk 'NR > 1 && $2 == "device" { print $1 }'
+)
 
-# Step 2: Check if there are devices
-if [ ${#devices[@]} -eq 0 ]; then
-  echo "❌ Tidak ada device yang terhubung."
-  exit 1
-fi
+device_count=${#devices[@]}
 
-# Step 3: Tampilkan menu awal
-echo "Pilih aksi utama:"
-echo "[0] Disconnect port"
-echo "[1] Connect (forward/reverse)"
-echo "[2] List Port"
-read -p "Masukkan pilihan (0/2): " main_action
-
-if [ "$main_action" = "0" ] || [ "$main_action" = "1" ]; then
-    :
-elif [ "$main_action" = "2" ]; then
-    adb forward --list
-    exit 0
-else
-    echo "❌ Opsi tidak valid."
+# Check whether any device is connected
+if (( device_count == 0 )); then
+    echo "No Android device is connected."
     exit 1
 fi
 
+# Display the main menu
+echo "Select an action:"
+echo "[0] Disconnect ports"
+echo "[1] Connect ports"
+echo "[2] List forwarded ports"
 
-# Step 4: Pilih device
-echo "📱 Daftar device yang terhubung:"
+read -rp "Enter your choice (0/1/2): " main_action
+
+case "$main_action" in
+    0|1)
+        ;;
+    2)
+        adb forward --list
+        exit 0
+        ;;
+    *)
+        echo "Invalid option."
+        exit 1
+        ;;
+esac
+
+# Display the connected devices
+echo "Connected devices:"
+
 for i in "${!devices[@]}"; do
-  echo "[$i] ${devices[$i]}"
+    echo "[$i] ${devices[$i]}"
 done
 
-read -p "Pilih device (0-${#devices[@]}): " device_index
+read -rp "Select a device (0-$((device_count - 1))): " device_index
 
-if ! [[ "$device_index" =~ ^[0-9]+$ ]] || [ "$device_index" -ge "${#devices[@]}" ]; then
-  echo "❌ Pilihan tidak valid."
-  exit 1
-fi
-
-selected_device=${devices[$device_index]}
-echo "✅ Device yang dipilih: $selected_device"
-
-# Step 5: Disconnect port
-if [ "$main_action" == "0" ]; then
-  echo "Masukkan port yang ingin di-disconnect (pisahkan dengan spasi):"
-  read -a ports
-
-  for port in "${ports[@]}"; do
-    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
-      echo "❌ Port tidak valid: $port"
-      exit 1
-    fi
-  done
-
-  for port in "${ports[@]}"; do
-    echo "🔌 Memutus forward tcp:$port (jika ada)"
-    adb -s "$selected_device" forward --remove tcp:$port
-
-    echo "🔌 Memutus reverse tcp:$port (jika ada)"
-    adb -s "$selected_device" reverse --remove tcp:$port
-  done
-
-  echo "✅ Semua port telah diputus."
-  exit 0
-fi
-
-# Step 6: Connect (forward/reverse)
-echo "Pilih metode koneksi:"
-echo "[0] Forward port (device -> host)"
-echo "[1] Reverse port (host -> device)"
-read -p "Pilih opsi (0/1): " action
-
-if [ "$action" != "0" ] && [ "$action" != "1" ]; then
-  echo "❌ Opsi tidak valid."
-  exit 1
-fi
-
-# Step 7: Masukkan satu atau lebih port
-read -p "Masukkan port yang ingin di-forward/reverse (pisahkan dengan spasi): " -a ports
-
-# Validasi port
-for port in "${ports[@]}"; do
-  if ! [[ "$port" =~ ^[0-9]+$ ]]; then
-    echo "❌ Port tidak valid: $port"
+# Validate the selected device
+if ! [[ "$device_index" =~ ^[0-9]+$ ]] ||
+    (( device_index < 0 || device_index >= device_count )); then
+    echo "Invalid device selection."
     exit 1
-  fi
-done
+fi
 
-# Step 8: Jalankan forward/reverse
+selected_device="${devices[$device_index]}"
+
+echo "Selected device: $selected_device"
+
+# Disconnect ports
+if [[ "$main_action" == "0" ]]; then
+    read -rp "Enter the ports to disconnect, separated by spaces: " -a ports
+
+    if (( ${#ports[@]} == 0 )); then
+        echo "No port was entered."
+        exit 1
+    fi
+
+    for port in "${ports[@]}"; do
+        if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+            echo "Invalid port: $port"
+            exit 1
+        fi
+    done
+
+    for port in "${ports[@]}"; do
+        echo "Removing forward port tcp:$port..."
+        adb -s "$selected_device" forward --remove "tcp:$port" 2>/dev/null || true
+
+        echo "Removing reverse port tcp:$port..."
+        adb -s "$selected_device" reverse --remove "tcp:$port" 2>/dev/null || true
+    done
+
+    echo "All selected ports have been disconnected."
+    exit 0
+fi
+
+# Select the connection method
+echo "Select the connection method:"
+echo "[0] Forward port (device to host)"
+echo "[1] Reverse port (host to device)"
+
+read -rp "Enter your choice (0/1): " connection_method
+
+if [[ "$connection_method" != "0" && "$connection_method" != "1" ]]; then
+    echo "Invalid option."
+    exit 1
+fi
+
+# Get the ports to forward or reverse
+read -rp "Enter the ports, separated by spaces: " -a ports
+
+if (( ${#ports[@]} == 0 )); then
+    echo "No port was entered."
+    exit 1
+fi
+
+# Validate the ports
 for port in "${ports[@]}"; do
-  if [ "$action" == "0" ]; then
-    echo "➡️  Forwarding tcp:$port -> tcp:$port untuk $selected_device"
-    adb -s "$selected_device" forward tcp:$port tcp:$port
-  else
-    echo "⬅️  Reversing tcp:$port -> tcp:$port untuk $selected_device"
-    adb -s "$selected_device" reverse tcp:$port tcp:$port
-  fi
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+        echo "Invalid port: $port"
+        exit 1
+    fi
 done
 
-echo "✅ Semua port telah diproses."
+# Forward or reverse the selected ports
+for port in "${ports[@]}"; do
+    if [[ "$connection_method" == "0" ]]; then
+        echo "Forwarding tcp:$port to tcp:$port..."
+        adb -s "$selected_device" forward "tcp:$port" "tcp:$port"
+    else
+        echo "Reversing tcp:$port to tcp:$port..."
+        adb -s "$selected_device" reverse "tcp:$port" "tcp:$port"
+    fi
+done
+
+echo "All selected ports have been processed."
+
+# Generated GTP 6 Astra Medium

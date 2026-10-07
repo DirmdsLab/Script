@@ -19,7 +19,7 @@ tmux select-layout -t "$SESSION:$WINDOW" tiled
 tmux list-panes -t "$SESSION:$WINDOW"
 
 # isi pane berdasarkan index
-tmux send-keys -t "$SESSION:$WINDOW.0" "clear && echo 'panel 1'" C-m
+tmux send-keys -t "$SESSION:$WINDOW.0" "clear && nix-shell -p filebrowser --run 'fish -c \"\\\"\\\$HOME/File/Software/App/File Browser/run.sh\\\"\"'" C-m
 tmux send-keys -t "$SESSION:$WINDOW.1" "clear && echo 'panel 2'" C-m
 tmux send-keys -t "$SESSION:$WINDOW.2" "clear && echo 'panel 3'" C-m
 tmux send-keys -t "$SESSION:$WINDOW.3" "clear && echo 'panel 4'" C-m

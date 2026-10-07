@@ -1,32 +1,71 @@
 #!/usr/bin/env bash
 
-# deps: cliphist wofi wl-copy
+set -u
 
-ACTION=$(printf "Paste\nDelete item\nDelete all" | \
-  wofi --dmenu --prompt "Clipboard")
+WOFI_OPTIONS=(
+    --dmenu
+    --insensitive
+    --cache-file
+    /dev/null
+    --width
+    600
+    --height
+    450
+)
 
-case "$ACTION" in
-  "Paste")
-    ITEM=$(cliphist list | \
-      wofi --dmenu --prompt "Paste from history")
+# Show clipboard history
+selected_item=$(
+    cliphist list |
+        wofi "${WOFI_OPTIONS[@]}" \
+        --prompt "Clipboard History"
+)
 
-    [ -z "$ITEM" ] && exit 0
-    cliphist decode <<< "$ITEM" | wl-copy
-    ;;
+# Exit if no item is selected
+[[ -z "$selected_item" ]] && exit 0
 
-  "Delete item")
-    ITEM=$(cliphist list | \
-      wofi --dmenu --prompt "Delete from history")
+# Show action menu
+action=$(
+    printf '%s\n' \
+        "Paste" \
+        "Pin" \
+        "Delete" |
+        wofi "${WOFI_OPTIONS[@]}" \
+        --prompt "Select Action"
+)
 
-    [ -z "$ITEM" ] && exit 0
-    cliphist delete <<< "$ITEM"
-    ;;
+# Process the selected action
+case "$action" in
+    "Paste")
+        tmp=$(mktemp)
+    
+        cliphist decode <<< "$selected_item" > "$tmp"
+    
+        mime=$(file --mime-type -b "$tmp")
+    
+        case "$mime" in
+            image/png|image/jpeg|image/webp)
+                wl-copy --type "$mime" < "$tmp"
+                ;;
+            *)
+                wl-copy < "$tmp"
+                ;;
+        esac
+    
+        rm "$tmp"
+        ;;
 
-  "Delete all")
-    printf "No\nYes" | \
-      wofi --dmenu --prompt "Delete all clipboard history?" | \
-      grep -q "Yes" || exit 0
+    "Pin")
+        cliphist pin <<< "$selected_item"
+        ;;
 
-    cliphist wipe
-    ;;
+    "Delete")
+        cliphist delete <<< "$selected_item"
+        ;;
+
+    *)
+        exit 0
+        ;;
 esac
+
+
+# Generated GTP 6 Astra Medium
