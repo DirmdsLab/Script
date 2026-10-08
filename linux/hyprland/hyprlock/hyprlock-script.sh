@@ -313,7 +313,7 @@ fi
 
 
 # Close special workspaces
-for workspace in magic temp UwU Hmph sysmon; do
+for workspace in Hmm Hmph UwU magic UxU sysmon; do
 
     hyprctl monitors -j |
     jq -e ".[] | select(.specialWorkspace.name==\"special:$workspace\" and .specialWorkspace.id!=-1)" \
