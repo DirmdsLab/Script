@@ -4,136 +4,395 @@ PID_FILE="/tmp/wallpaper.pid"
 MONITOR="DP-1"
 VIDEO_DIR="$HOME/Videos/Wallpapers"
 
-# Cek apakah dipanggil dengan argumen
+VIDEO=""
+SKIP_EFFECTS=false
+NO_AUDIO_VISUAL=false
+USE_IPC=false
+USE_MIRROR=false
+
+
+# Check direct video path argument
 if [[ "$1" == "videopath" && -n "$2" ]]; then
+
     VIDEO="$2"
     SKIP_EFFECTS=true
+
 else
-# Cari semua file video di folder
-mapfile -t FILES < <(find -L "$VIDEO_DIR" -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" -o -iname "*.m3u" \) -printf '%T@ %p\n' \
-    | sort -nr | cut -d' ' -f2-)
 
-# Buat daftar untuk wofi: hanya nama file + icon 🎬
-MENU=$(for f in "${FILES[@]}"; do
-    name=$(basename "$f")
-    echo "🎬 $name"
-done | wofi --dmenu --insensitive --prompt "Pilih Video Wallpaper:")
+    # Find video wallpapers
+    mapfile -t FILES < <(
+        find -L "$VIDEO_DIR" \
+            -type f \
+            \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" -o -iname "*.m3u" \) \
+            -printf '%T@ %p\n' |
+        sort -nr |
+        cut -d' ' -f2-
+    )
 
-# Kalau tidak memilih apa pun, keluar
-[ -z "$MENU" ] && exit 0
 
-# Cari path asli dari nama yang dipilih
-VIDEO=""
-for f in "${FILES[@]}"; do
-    if [[ "🎬 $(basename "$f")" == "$MENU" ]]; then
-        VIDEO="$f"
-        break
-    fi
-done
+    # Video selector
+    MENU=$(
+        for f in "${FILES[@]}"; do
+            basename "$f"
+        done |
+        wofi \
+            --dmenu \
+            --insensitive \
+            --prompt "Select Video Wallpaper"
+    )
 
-SKIP_EFFECTS=false
 
+    [ -z "$MENU" ] && exit 0
+
+
+    # Resolve video path
+    for f in "${FILES[@]}"; do
+
+        if [[ "$(basename "$f")" == "$MENU" ]]; then
+            VIDEO="$f"
+            break
+        fi
+
+    done
 
 fi
 
 
-
-# Kalau tidak memilih apa pun, keluar
 [ -z "$VIDEO" ] && exit 0
 
-MPV_OPTS='--title=mpvpaperhyprlock --no-config volume=100 --loop --loop-playlist shuffle --vf=scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080'
+
+
+# Base mpv options
+MPV_OPTS='--title=mpvpaperhyprlock --no-config volume=100 --loop --loop-playlist shuffle'
+
+
+# Video filter
+VIDEO_FILTER="scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=60"
 
 
 
+# Effect selector
 if [ "$SKIP_EFFECTS" = false ]; then
-    MIRROR=$(printf "🎚️ Tidak\n🌈 Color Up\n🪞 Mirror Horizontal\n🔇 Mute\n🔇🪞 Mute Miror\n🚫🎶 Tanpa Audio Visual" | wofi --dmenu --prompt "Efek")
 
-    [ "$MIRROR" = "🌈 Color Up" ] && MPV_OPTS="$MPV_OPTS input-ipc-server=/tmp/mpvlock-socket"
-    [ "$MIRROR" = "🪞 Mirror Horizontal" ] && MPV_OPTS="$MPV_OPTS,hflip"
-    [ "$MIRROR" = "🔇 Mute" ] && MPV_OPTS="mute=yes,$MPV_OPTS"
-    [ "$MIRROR" = "🔇🪞 Mute Miror" ] && MPV_OPTS="mute=yes,$MPV_OPTS,hflip"
-    [ "$MIRROR" = "🚫🎶 Tanpa Audio Visual" ] && NO_AUDIO_VISUAL=true
+
+    EFFECT_LIST=(
+        "Color Up"
+        "Mirror Horizontal"
+        "Mute"
+        "Disable Audio Visual"
+    )
+
+
+    SELECTED_EFFECTS=()
+
+
+    while true; do
+
+
+        MENU="None\n"
+
+
+        for effect in "${EFFECT_LIST[@]}"; do
+
+            CHECK="[ ]"
+
+
+            for selected in "${SELECTED_EFFECTS[@]}"; do
+
+                if [[ "$selected" == "$effect" ]]; then
+                    CHECK="[x]"
+                    break
+                fi
+
+            done
+
+
+            MENU+="$CHECK $effect\n"
+
+        done
+
+
+        MENU+="Apply"
+
+
+        CHOICE=$(printf "%b" "$MENU" |
+            wofi \
+            --dmenu \
+            --prompt "Select Effects")
+
+
+        [ -z "$CHOICE" ] && break
+
+
+
+        EFFECT=$(echo "$CHOICE" | sed 's/^\[[ x]\] //')
+
+
+        case "$EFFECT" in
+
+
+            "None")
+
+                SELECTED_EFFECTS=()
+                break
+
+                ;;
+
+
+            "Apply")
+
+                break
+
+                ;;
+
+
+            *)
+
+                FOUND=false
+                NEW_SELECTION=()
+
+
+                for selected in "${SELECTED_EFFECTS[@]}"; do
+
+                    if [[ "$selected" == "$EFFECT" ]]; then
+
+                        FOUND=true
+
+                    else
+
+                        NEW_SELECTION+=("$selected")
+
+                    fi
+
+                done
+
+
+                if [ "$FOUND" = false ]; then
+                    NEW_SELECTION+=("$EFFECT")
+                fi
+
+
+                SELECTED_EFFECTS=("${NEW_SELECTION[@]}")
+
+                ;;
+
+        esac
+
+
+    done
+
+
+
+    # Apply effects
+    for EFFECT in "${SELECTED_EFFECTS[@]}"; do
+
+
+        case "$EFFECT" in
+
+
+            "Color Up")
+
+                MPV_OPTS="$MPV_OPTS --input-ipc-server=/tmp/mpvlock-socket"
+                USE_IPC=true
+
+                ;;
+
+
+            "Mirror Horizontal")
+
+                USE_MIRROR=true
+
+                ;;
+
+
+            "Mute")
+
+                MPV_OPTS="$MPV_OPTS --mute=yes"
+
+                ;;
+
+
+            "Disable Audio Visual")
+
+                NO_AUDIO_VISUAL=true
+
+                ;;
+
+
+        esac
+
+
+    done
+
+
 fi
 
 
-# Hentikan wallpaper lama jika ada
+
+# Add mirror filter
+if [ "$USE_MIRROR" = true ]; then
+
+    VIDEO_FILTER="$VIDEO_FILTER,hflip"
+
+fi
+
+
+
+# Add final video filter
+MPV_OPTS="$MPV_OPTS --vf=$VIDEO_FILTER"
+
+
+
+# Stop previous wallpaper
 if [ -f "$PID_FILE" ]; then
+
     OLD_PID=$(cat "$PID_FILE")
-    if kill "$OLD_PID" 2>/dev/null; then
-        rm "$PID_FILE"
-    fi
+
+    kill "$OLD_PID" 2>/dev/null
+
+    rm "$PID_FILE"
+
 fi
 
-hyprctl monitors -j | jq -e '.[] | select(.specialWorkspace.name=="special:magic" and .specialWorkspace.id!=-1)' >/dev/null && hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special("magic"))' 
-hyprctl monitors -j | jq -e '.[] | select(.specialWorkspace.name=="special:temp" and .specialWorkspace.id!=-1)' >/dev/null && hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special("temp"))' 
-hyprctl monitors -j | jq -e '.[] | select(.specialWorkspace.name=="special:UwU" and .specialWorkspace.id!=-1)' >/dev/null && hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special("UwU"))' 
-hyprctl monitors -j | jq -e '.[] | select(.specialWorkspace.name=="special:Hmph" and .specialWorkspace.id!=-1)' >/dev/null && hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special("Hmph"))' 
-hyprctl monitors -j | jq -e '.[] | select(.specialWorkspace.name=="special:sysmon" and .specialWorkspace.id!=-1)' >/dev/null && hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special("sysmon"))' 
+
+
+# Close special workspaces
+for workspace in magic temp UwU Hmph sysmon; do
+
+    hyprctl monitors -j |
+    jq -e ".[] | select(.specialWorkspace.name==\"special:$workspace\" and .specialWorkspace.id!=-1)" \
+    >/dev/null &&
+    hyprctl eval "hl.dispatch(hl.dsp.workspace.toggle_special(\"$workspace\"))"
+
+done
+
 
 
 sleep 0.5
+
+
 
 hyprctl dispatch "hl.dsp.focus({ workspace = 21 })"
 
+
+
+# Remove old IPC socket
+rm -f /tmp/mpvlock-socket
+
+
+
+# Start wallpaper
 mpvpaper -o "$MPV_OPTS" "$MONITOR" "$VIDEO" -f &
 
-# Tunggu proses mpv muncul lalu simpan PID-nya
+
+
 sleep 0.5
+
+
 PID=$(pgrep -f "mpv.*mpvpaperhyprlock" | head -n 1)
+
 echo "$PID" > "$PID_FILE"
+
+
 
 : > /tmp/lockscreenstyle.log
 
 
+
+# Apply saturation if IPC enabled
+if [ "$USE_IPC" = true ]; then
+
+    sleep 0.5
+
+
+    if [ -S /tmp/mpvlock-socket ]; then
+
+        echo '{ "command": ["set_property", "saturation", 70] }' |
+        socat - /tmp/mpvlock-socket
+
+    fi
+
+fi
+
+
+
+# Kitty overlay
 sleep 0.5
-echo '{ "command": ["set_property", "saturation", 70] }' | socat - /tmp/mpvlock-socket
 
-sleep 0.5
 
-kitty --class kitty-overlay \
-  --config "$HOME/File/Software/App/kitty/kitty-log.conf" \
-  -e sh -c '
-    sleep 1
-    logfile="/tmp/lockscreenstyle.log"
-    sleep 1
-    # 1: print baris per baris dengan delay
-    while IFS= read -r line; do
-      printf "%s\n" "$line"
-      sleep 0.2
-    done < "$logfile"
+kitty \
+    --class kitty-overlay \
+    --config "$HOME/File/Software/App/kitty/kitty-log.conf" \
+    -e sh -c '
+        sleep 1
 
-    # 2: lanjut follow seperti tail -f
-    tail -f "$logfile"
-  ' &
+        logfile="/tmp/lockscreenstyle.log"
+
+        while IFS= read -r line; do
+            printf "%s\n" "$line"
+            sleep 0.2
+        done < "$logfile"
+
+        tail -f "$logfile"
+    ' &
 
 
 KITTY_OVERLAY_PID=$!
 
+
+
 sleep 0.5
+
+
 
 hyprctl dispatch 'hl.dsp.focus({ window = "class:kitty-overlay" })'
 
+
+
 sleep 0.5
 
+
+
+# Start cava
 if [ "$NO_AUDIO_VISUAL" != true ]; then
-    kitty --class kitty-audio --config "$HOME/File/Software/App/kitty/kitty-transparant.conf" -e cava -p "$HOME/File/Software/App/cava/kitty-audio-config" &
+
+    kitty \
+        --class kitty-audio \
+        --config "$HOME/File/Software/App/kitty/kitty-transparant.conf" \
+        -e cava \
+        -p "$HOME/File/Software/App/cava/kitty-audio-config" &
+
+
     KITTY_AUDIO_PID=$!
+
 fi
 
+
+
+# Start hyprlock
 stdbuf -oL -eL hyprlock >> /tmp/lockscreenstyle.log 2>&1 &
 
-# Simpan PID hyprlock
 HYPRLOCK_PID=$!
 
-wait $HYPRLOCK_PID
 
+
+wait "$HYPRLOCK_PID"
+
+
+
+# Cleanup
 kill "$KITTY_AUDIO_PID" 2>/dev/null
 kill "$KITTY_OVERLAY_PID" 2>/dev/null
 
+
+
 if [ -f "$PID_FILE" ]; then
+
     kill "$(cat "$PID_FILE")" 2>/dev/null
     rm "$PID_FILE"
+
 fi
+
 
 
 hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = "empty" }))'
