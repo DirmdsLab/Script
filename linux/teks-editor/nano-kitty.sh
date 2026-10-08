@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-file="$1"
+FILE="$1"
 
-# ambil absolute path supaya aman
-path="$(realpath "$file")"
+# Resolve the absolute file path
+FILE_PATH="$(realpath "$FILE")"
 
-# buka kitty + nano
-kitty -e nano "$path"
+# Open the file in Nano using Kitty
+kitty -e nano "$FILE_PATH"
