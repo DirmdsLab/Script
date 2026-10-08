@@ -7,43 +7,43 @@ BACKUP="${PLAYLIST}.bak"
 TEMP="${PLAYLIST}.tmp"
 
 if [[ ! -f "$PLAYLIST" ]]; then
-    echo "Error: playlist tidak ditemukan: $PLAYLIST"
+    echo "Error: Playlist not found: $PLAYLIST"
     exit 1
 fi
 
-# Backup playlist asli
+# Back up the original playlist
 cp -f "$PLAYLIST" "$BACKUP"
 
 awk '
 BEGIN {
-    # Path terakhir yang dibaca
+    # Last path read
     last_path = ""
 }
 
-# Baris komentar/metadata, tetap dipertahankan
+# Preserve comment and metadata lines
 /^#/ {
     print
     next
 }
 
-# Baris kosong, tetap dipertahankan
+# Preserve empty lines
 /^$/ {
     print
     next
 }
 
 {
-    # Jika path sudah pernah muncul, jangan tampilkan lagi
+    # Skip paths that have already appeared
     if (!seen[$0]++) {
         print
     }
 }
 ' "$PLAYLIST" > "$TEMP"
 
-# Ganti playlist asli dengan hasil
+# Replace the original playlist with the cleaned version
 mv -f "$TEMP" "$PLAYLIST"
 
-echo "Duplicate path removed."
+echo "Duplicate paths removed."
 echo "Clean playlist:"
 echo "$PLAYLIST"
 echo "Original playlist backed up to:"

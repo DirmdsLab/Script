@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# Cek argumen
+# Check arguments
 if [ $# -ne 2 ]; then
-    echo "Usage: $0 jumlah_penggandaan input_playlist.m3u"
+    echo "Usage: $0 repeat_count input_playlist.m3u"
     exit 1
 fi
 
@@ -10,17 +10,18 @@ COUNT="$1"
 INPUT="$2"
 OUTPUT="${INPUT%.m3u}_x${COUNT}.m3u"
 
-# Validasi COUNT harus angka positif
+# Validate COUNT as a positive integer
 if ! [[ "$COUNT" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: jumlah_penggandaan harus angka positif (>0)"
+    echo "Error: repeat_count must be a positive integer (>0)"
     exit 1
 fi
 
-# Tulis header
+# Write playlist header
 echo "#EXTM3U" > "$OUTPUT"
 
-# Baca file baris demi baris dan gandakan tiap pasangan EXTINF + path
+# Read each line and duplicate every EXTINF + path pair
 prev=""
+
 while IFS= read -r line; do
     if [[ "$line" == \#EXTINF* ]]; then
         prev="$line"
@@ -33,5 +34,4 @@ while IFS= read -r line; do
     fi
 done < "$INPUT"
 
-echo "✅ Playlist berhasil digandakan $COUNT kali per entri: $OUTPUT"
-
+echo "Playlist entries successfully repeated $COUNT times: $OUTPUT"
