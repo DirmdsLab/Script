@@ -61,6 +61,62 @@ fi
 [ -z "$VIDEO" ] && exit 0
 
 
+# ==========================================
+# Symlink Video Cache
+# ==========================================
+
+TMP_DIR="/tmp/hyprlock-mpv_tmp"
+
+# Create cache directory
+mkdir -p -- "$TMP_DIR" || exit 1
+
+# Delete cached files older than 7 days
+find "$TMP_DIR" \
+    -maxdepth 1 \
+    -type f \
+    -mmin +10080 \
+    -delete
+
+
+# Only cache symlink videos
+if [[ -L "$VIDEO" ]]; then
+
+    CACHE_VIDEO="$TMP_DIR/$(basename -- "$VIDEO")"
+
+    # Copy only if not already cached
+    if [[ ! -f "$CACHE_VIDEO" ]]; then
+
+        notify-send "Copying to tmp"
+
+        echo "Caching symlink video: $VIDEO"
+
+        # Copy atomically to avoid incomplete cache
+        TMP_COPY=$(mktemp "$TMP_DIR/.copy.XXXXXXXX") || exit 1
+
+        if ! cp -- "$VIDEO" "$TMP_COPY"; then
+            rm -f -- "$TMP_COPY"
+            exit 1
+        fi
+
+        if ! mv -- "$TMP_COPY" "$CACHE_VIDEO"; then
+            rm -f -- "$TMP_COPY"
+            exit 1
+        fi
+
+    else
+
+        echo "Using cached video: $CACHE_VIDEO"
+
+    fi
+
+    # Play cached video instead of symlink
+    VIDEO="$CACHE_VIDEO"
+
+fi
+
+
+# Base mpv options
+
 
 # Base mpv options
 MPV_OPTS='--title=mpvpaperhyprlock --no-config volume=100 --loop --loop-playlist shuffle'
