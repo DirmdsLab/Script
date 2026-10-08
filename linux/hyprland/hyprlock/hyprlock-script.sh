@@ -65,16 +65,16 @@ fi
 # Symlink Video Cache
 # ==========================================
 
-TMP_DIR="/tmp/hyprlock-mpv_tmp"
+TMP_DIR="/tmp/hypr-mpv_tmp"
 
 # Create cache directory
 mkdir -p -- "$TMP_DIR" || exit 1
 
-# Delete cached files older than 7 days
+# Delete cached files older than 3 days
 find "$TMP_DIR" \
     -maxdepth 1 \
     -type f \
-    -mmin +10080 \
+    -mmin +4320 \
     -delete
 
 

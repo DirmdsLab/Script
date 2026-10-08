@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Cek argumen
+# Check arguments
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <video-file>"
     exit 1
@@ -8,26 +8,25 @@ fi
 
 VIDEO="$1"
 
-# Ambil nama file tanpa path dan tanpa ekstensi
+# Extract filename without path and extension
 VIDEO_NAME=$(basename "$VIDEO")
 VIDEO_NAME="${VIDEO_NAME%.*}"
 
-# Sisakan hanya A-Z, a-z, dan 0-9
+# Keep only alphanumeric characters
 VIDEO_NAME=$(echo "$VIDEO_NAME" | tr -cd '[:alnum:]')
 
-# Fallback jika kosong
+# Use fallback name if empty
 if [ -z "$VIDEO_NAME" ]; then
     VIDEO_NAME="default"
 fi
 
-# Timestamp agar selalu unik
+# Generate a timestamp for a unique session name
 TIMESTAMP=$(date +%s)
 
-# Nama session
+# Define session name
 SESSION_NAME="Music-${VIDEO_NAME}-${TIMESTAMP}"
 
-# Jalankan mpv di tmux
+# Launch mpv in a detached tmux session
 tmux new-session -d -s "$SESSION_NAME" "mpv --wayland-app-id=music-mpv \"$VIDEO\""
-
 
 echo "MPV started in tmux session: $SESSION_NAME"

@@ -1,9 +1,10 @@
+
 #!/usr/bin/env bash
 
 set -euo pipefail
 
 # ==========================
-# Cek argumen
+# Check arguments
 # ==========================
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <video-file>"
@@ -13,18 +14,18 @@ fi
 VIDEO="$1"
 
 # ==========================
-# Direktori script
+# Cava configuration path
 # ==========================
 CAVA_CONFIG="$HOME/File/Software/App/cava/cava-anime.conf"
 
 if [ ! -f "$CAVA_CONFIG" ]; then
-    echo "Config cava tidak ditemukan:"
+    echo "Cava configuration file not found:"
     echo "  $CAVA_CONFIG"
     exit 1
 fi
 
 # ==========================
-# Nama session
+# Generate session name
 # ==========================
 VIDEO_NAME=$(basename "$VIDEO")
 VIDEO_NAME="${VIDEO_NAME%.*}"
@@ -35,40 +36,42 @@ VIDEO_NAME=$(printf "%s" "$VIDEO_NAME" | tr -cd '[:alnum:]')
 SESSION_NAME="ANIME-${VIDEO_NAME}-$(date +%s)"
 
 # ==========================
-# Pane kiri (mpv)
+# Left pane (mpv)
 # ==========================
 tmux new-session -d -s "$SESSION_NAME" \
     "mpv \"$VIDEO\"; tmux wait-for -S ${SESSION_NAME}_done"
 
 # ==========================
-# Pane kanan (25%)
+# Right pane (25%)
 # ==========================
 tmux split-window -h -p 25 -t "$SESSION_NAME":0
 
 # ==========================
-# Bagi pane kanan
-# Atas 35% (clock)
-# Bawah 65% (cava)
+# Split the right pane
+# Top: 35% (clock)
+# Bottom: 65% (cava)
 # ==========================
 tmux split-window -v -p 65 -t "$SESSION_NAME":0.1
 
 # ==========================
-# Jalankan peaclock
+# Start peaclock
 # ==========================
 tmux send-keys -t "$SESSION_NAME":0.1 \
-"clear; peaclock" C-m
+    "clear; peaclock" C-m
 
 # ==========================
-# Jalankan cava
+# Start cava
 # ==========================
 tmux send-keys -t "$SESSION_NAME":0.2 \
-"clear; cava -p \"$CAVA_CONFIG\"" C-m
+    "clear; cava -p \"$CAVA_CONFIG\"" C-m
 
-# focus to mpv
+# ==========================
+# Focus on the mpv pane
+# ==========================
 tmux select-pane -t "$SESSION_NAME":0.0
 
 # ==========================
-# Tutup session saat mpv selesai
+# Close session when mpv exits
 # ==========================
 (
     tmux wait-for "${SESSION_NAME}_done"
@@ -76,4 +79,3 @@ tmux select-pane -t "$SESSION_NAME":0.0
 ) >/dev/null 2>&1 &
 
 echo "Anime started in tmux session: $SESSION_NAME"
-

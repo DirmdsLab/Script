@@ -8,7 +8,7 @@ WOFI_OPTIONS=(
     --cache-file
     /dev/null
     --width
-    600
+    800
     --height
     450
 )
