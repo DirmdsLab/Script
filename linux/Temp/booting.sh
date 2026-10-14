@@ -73,7 +73,7 @@ sleep 1
 log "Type ADB directory command"
 ydotool type -- "cd $HOME/File/Script/adb/ && ls"
 
-sleep 1
+sleep 5
 
 # Press Enter
 log "Enter"
