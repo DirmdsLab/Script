@@ -13,6 +13,13 @@ echo "[INFO] $(date "+%F %T") Starting hyprlock..." >> "$LOG"
 # Record lock start time
 LOCK_START=$(date +%s)
 
+(
+    sleep 10
+    notify-send "pause"
+    printf '{"command":["set_property","pause",true]}\n' |
+        socat - UNIX-CONNECT:/tmp/mpv-socket >/dev/null 2>&1
+) &
+
 hyprlock --config ~/File/Software/App/hyprland/hyprlock/hyprlock-idle.conf >>"$LOG" 2>&1
 STATUS=$?
 

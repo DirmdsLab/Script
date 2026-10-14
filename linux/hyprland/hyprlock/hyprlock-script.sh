@@ -4,6 +4,8 @@ PID_FILE="/tmp/wallpaper.pid"
 MONITOR="DP-1"
 VIDEO_DIR="$HOME/Videos/Wallpapers"
 
+LOG="/tmp/lockscreenstyle.log"
+
 VIDEO=""
 SKIP_EFFECTS=false
 NO_AUDIO_VISUAL=false
@@ -423,14 +425,21 @@ if [ "$NO_AUDIO_VISUAL" != true ]; then
 
 fi
 
-
+(
+    sleep 10
+    notify-send "pause"
+    printf '{"command":["set_property","pause",true]}\n' |
+        socat - UNIX-CONNECT:/tmp/mpv-socket >/dev/null 2>&1
+) &
 
 # Start hyprlock
 stdbuf -oL -eL hyprlock >> /tmp/lockscreenstyle.log 2>&1 &
 
 HYPRLOCK_PID=$!
 
+echo "[INFO] $(date "+%F %T") Starting hyprlock..." >> "$LOG"
 
+LOCK_START=$(date +%s)
 
 wait "$HYPRLOCK_PID"
 
@@ -449,6 +458,19 @@ if [ -f "$PID_FILE" ]; then
 
 fi
 
+# Calculate lock duration
+LOCK_END=$(date +%s)
+LOCK_DURATION=$((LOCK_END - LOCK_START))
 
+# Format duration as HH:MM:SS
+HOURS=$((LOCK_DURATION / 3600))
+MINUTES=$(((LOCK_DURATION % 3600) / 60))
+SECONDS=$((LOCK_DURATION % 60))
+LOCK_DURATION_FMT=$(printf "%02d:%02d:%02d" "$HOURS" "$MINUTES" "$SECONDS")
+
+echo "[INFO] $(date "+%F %T") hyprlock exited with status $STATUS" >> "$LOG"
+echo "[INFO] $(date "+%F %T") Lock duration: ${LOCK_DURATION_FMT} (${LOCK_DURATION}s)" >> "$LOG"
+
+notify-send "unlock" "Lock duration: ${LOCK_DURATION_FMT}"
 
 hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = "empty" }))'

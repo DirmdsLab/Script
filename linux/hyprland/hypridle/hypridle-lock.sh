@@ -2,7 +2,7 @@
 
 LOG_FILE="/tmp/lockscreenstyle.log"
 LOCK_SCRIPT="$HOME/File/Script/hyprland/hyprlock/hyprlock-script.sh"
-VIDEO="$HOME/Videos/Wallpaper/santai-hijau-lofi.mp4"
+VIDEO="$HOME/Videos/Wallpaper/shina-with-audio.mp4"
 
 # Check if hyprlock is already running
 if pgrep -x hyprlock > /dev/null; then

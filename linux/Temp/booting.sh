@@ -47,7 +47,11 @@ sleep 1
 
 # Type Idle command
 log "Idle"
-ydotool type -- "while true; ydotool mousemove -x 1 -y 1; sleep 8m; end"
+ydotool type 'echo setupstay'
+
+sleep 2
+
+ydotool key 106:1 106:0
 
 sleep 1
 
