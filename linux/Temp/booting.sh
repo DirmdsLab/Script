@@ -73,13 +73,31 @@ sleep 1
 log "Type ADB directory command"
 ydotool type -- "cd $HOME/File/Script/adb/ && ls"
 
-sleep 5
+sleep 1
 
 # Press Enter
 log "Enter"
 ydotool key 28:1 28:0
 
 sleep 1
+
+log "Check ADB device"
+if adb devices | grep -qE '^13343154AH001453[[:space:]]+device$'; then
+    log "ADB device detected"
+
+    ydotool type 'echo adbsetup'
+    sleep 2
+
+    log "Press Right Arrow"
+    ydotool key 106:1 106:0
+    sleep 1
+
+    log "Enter"
+    ydotool key 28:1 28:0
+    sleep 1
+else
+    log "ADB device not detected"
+fi
 
 # Open new Tmux tab
 log "Open new Tmux tab"
