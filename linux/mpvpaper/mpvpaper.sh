@@ -28,8 +28,9 @@ browse_files() {
     local root_dir="$1"
     local mode="$2"
     local current_dir="$root_dir"
-    local selected file directory
-    local -a files folders entries
+    local selected file directory cache_name cache_key selected_cache
+    local -a files=() folders=() entries=() cache_files=()
+    local -A available_names=()
 
     if [[ ! -d "$root_dir" ]]; then
         printf 'Directory not found: %s\n' "$root_dir" >&2
@@ -37,9 +38,15 @@ browse_files() {
     fi
 
     while true; do
+        files=()
+        folders=()
+        entries=()
+        cache_files=()
+        available_names=()
+
         mapfile -d '' -t folders < <(
             find -L "$current_dir" -mindepth 1 -maxdepth 1 \
-                -type d ! -name '.*' -printf '%T@ %f\0' |
+                -type d ! -name '.*' -printf '%T@ %f\0' 2>/dev/null |
                 sort -zrn | cut -z -d ' ' -f2-
         )
 
@@ -47,7 +54,7 @@ browse_files() {
             playlist)
                 mapfile -d '' -t files < <(
                     find -L "$current_dir" -mindepth 1 -maxdepth 1 \
-                        -type f -iname '*.m3u' -printf '%T@ %f\0' |
+                        -type f -iname '*.m3u' -printf '%T@ %f\0' 2>/dev/null |
                         sort -zrn | cut -z -d ' ' -f2-
                 )
                 ;;
@@ -56,7 +63,7 @@ browse_files() {
                     find -L "$current_dir" -mindepth 1 -maxdepth 1 \
                         -type f \( -iname '*.mp4' -o -iname '*.mkv' \
                         -o -iname '*.webm' -o -iname '*.avi' \
-                        -o -iname '*.mov' \) -printf '%T@ %f\0' |
+                        -o -iname '*.mov' \) -printf '%T@ %f\0' 2>/dev/null |
                         sort -zrn | cut -z -d ' ' -f2-
                 )
                 ;;
@@ -67,20 +74,50 @@ browse_files() {
                         \( -iname '*.m3u' -o -iname '*.mp4' \
                         -o -iname '*.mkv' -o -iname '*.webm' \
                         -o -iname '*.avi' -o -iname '*.mov' \) \
-                        -printf '%T@ %f\0' |
+                        -printf '%T@ %f\0' 2>/dev/null |
                         sort -zrn | cut -z -d ' ' -f2-
                 )
                 ;;
             any)
                 mapfile -d '' -t files < <(
                     find -L "$current_dir" -mindepth 1 -maxdepth 1 \
-                        -type f ! -name '.*' -printf '%T@ %f\0' |
+                        -type f ! -name '.*' -printf '%T@ %f\0' 2>/dev/null |
                         sort -zrn | cut -z -d ' ' -f2-
                 )
                 ;;
+            *)
+                printf 'Unsupported browse mode: %s\n' "$mode" >&2
+                return 1
+                ;;
         esac
 
-        entries=("Back to Main Menu")
+        # Include cached videos in both Video and Explorer Path at the video root.
+        # A cache is hidden only when a readable source with the same name exists.
+        if [[ "$current_dir" == "$root_dir" && ( "$mode" == "video" || "$mode" == "media" ) ]]; then
+            for file in "${files[@]}"; do
+                available_names["${file,,}"]=1
+            done
+
+            if [[ -d "$CACHE_DIR" ]]; then
+                mapfile -d '' -t cache_files < <(
+                    find "$CACHE_DIR" -maxdepth 1 -type f \
+                        \( -iname '*.mp4' -o -iname '*.mkv' \
+                        -o -iname '*.webm' -o -iname '*.avi' \
+                        -o -iname '*.mov' \) -printf '%T@ %f\0' 2>/dev/null |
+                        sort -zrn | cut -z -d ' ' -f2-
+                )
+
+                for cache_name in "${cache_files[@]}"; do
+                    cache_key="${cache_name,,}"
+                    if [[ -n "${available_names[$cache_key]+x}" ]]; then
+                        continue
+                    fi
+                    entries+=("[TMP] $cache_name")
+                done
+            fi
+        fi
+
+        entries=("Back to Main Menu" "${entries[@]}")
 
         if [[ "$mode" == "media" && "$current_dir" != "$HOME" ]] || \
             { [[ "$mode" != "media" ]] && [[ "$current_dir" != "$root_dir" ]]; }; then
@@ -119,6 +156,17 @@ browse_files() {
                 fi
                 [[ -n "$selected" ]] || return 1
                 printf '%s\n' "$selected"
+                return 0
+                ;;
+            "[TMP] "*)
+                selected_cache="$CACHE_DIR/${selected#\[TMP\] }"
+                if [[ ! -f "$selected_cache" ]]; then
+                    printf 'Cached video no longer exists: %s\n' "$selected_cache" >&2
+                    return 1
+                fi
+                # Refresh the cache timestamp immediately after selection.
+                touch -- "$selected_cache" || return 1
+                printf '%s\n' "$selected_cache"
                 return 0
                 ;;
             "[Directory] "*)
@@ -169,6 +217,7 @@ cache_symlink_video() {
     cached_video="$CACHE_DIR/$(basename -- "$SELECTED")"
 
     if [[ -f "$cached_video" ]]; then
+        touch -- "$cached_video" || return 1
         printf 'Using cached video: %s\n' "$cached_video"
         SELECTED="$cached_video"
         return 0
@@ -191,6 +240,7 @@ cache_symlink_video() {
         return 1
     fi
 
+    touch -- "$cached_video" || return 1
     SELECTED="$cached_video"
 }
 
@@ -304,6 +354,11 @@ main() {
     if [[ ! -f "$SELECTED" ]]; then
         printf 'File not found: %s\n' "$SELECTED" >&2
         return 1
+    fi
+
+    # Refresh a selected cache file before cleanup so it cannot expire during playback startup.
+    if [[ "$SELECTED" == "$CACHE_DIR/"* && -f "$SELECTED" ]]; then
+        touch -- "$SELECTED" || return 1
     fi
 
     cleanup_video_cache
