@@ -1,10 +1,34 @@
 #!/usr/bin/env bash
 
+# Resolve paths relative to this script, not the current working directory.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+SHADER_DIR="$SCRIPT_DIR/shader"
+MIRROR_SHADER="$SHADER_DIR/hflip.glsl"
+
+# Create the local shader directory and install the mirror shader if missing.
+mkdir -p -- "$SHADER_DIR" || exit 1
+
+if [[ ! -f "$MIRROR_SHADER" ]]; then
+    cat > "$MIRROR_SHADER" <<'GLSL'
+//!HOOK MAIN
+//!DESC Horizontal mirror
+//!BIND HOOKED
+
+vec4 hook()
+{
+    vec2 flipped_position = HOOKED_pos;
+    flipped_position.x = 1.0 - flipped_position.x;
+    return HOOKED_tex(flipped_position);
+}
+GLSL
+fi
+
 PID_FILE="/tmp/wallpaper.pid"
 MONITOR="DP-1"
 VIDEO_DIR="$HOME/Videos/Wallpapers"
 TMP_DIR="/tmp/hypr-mpv_tmp"
 LOG="/tmp/lockscreenstyle.log"
+IPC_SOCKET="/tmp/mpvlock-socket"
 
 VIDEO=""
 SKIP_EFFECTS=false
@@ -13,6 +37,7 @@ USE_IPC=false
 USE_MIRROR=false
 KITTY_AUDIO_PID=""
 KITTY_OVERLAY_PID=""
+HYPRLOCK_PID=""
 
 # Create the cache directory before building the video list.
 mkdir -p -- "$TMP_DIR" || exit 1
@@ -32,7 +57,7 @@ else
         while IFS= read -r -d '' SOURCE_PATH; do
             [[ -f "$SOURCE_PATH" && -r "$SOURCE_PATH" ]] || continue
 
-            BASE_NAME=$(basename -- "$SOURCE_PATH")
+            BASE_NAME="$(basename -- "$SOURCE_PATH")"
             SOURCE_KEY="${BASE_NAME,,}"
 
             AVAILABLE_SOURCE_NAMES["$SOURCE_KEY"]=1
@@ -52,7 +77,7 @@ else
     while IFS= read -r -d '' CACHE_PATH; do
         [[ -f "$CACHE_PATH" && -r "$CACHE_PATH" ]] || continue
 
-        BASE_NAME=$(basename -- "$CACHE_PATH")
+        BASE_NAME="$(basename -- "$CACHE_PATH")"
         CACHE_KEY="${BASE_NAME,,}"
 
         if [[ -n "${AVAILABLE_SOURCE_NAMES[$CACHE_KEY]+x}" ]]; then
@@ -160,7 +185,7 @@ if [[ -L "$VIDEO" ]]; then
         notify-send "Copying to tmp" 2>/dev/null || true
         echo "Caching symlink video: $VIDEO"
 
-        TMP_COPY=$(mktemp "$TMP_DIR/.copy.XXXXXXXX") || exit 1
+        TMP_COPY="$(mktemp "$TMP_DIR/.copy.XXXXXXXX")" || exit 1
 
         if ! cp -- "$VIDEO" "$TMP_COPY"; then
             rm -f -- "$TMP_COPY"
@@ -178,17 +203,14 @@ if [[ -L "$VIDEO" ]]; then
     # Reset cache expiration whenever the selected symlink cache is used.
     touch -- "$CACHE_VIDEO" || exit 1
     VIDEO="$CACHE_VIDEO"
-
 elif [[ "$VIDEO" == "$TMP_DIR/"* ]]; then
     # Reset cache expiration when a cached video is selected directly.
     touch -- "$VIDEO" || exit 1
 fi
 
-# Base mpv options.
-MPV_OPTS='--title=mpvpaperhyprlock --no-config volume=100 --loop --loop-playlist shuffle'
-
-# Video filter.
-VIDEO_FILTER="scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=60"
+# Use hardware decoding and GPU-side scaling. Do not add software video filters.
+# Keep IPC enabled so both Color Up and the delayed pause command use one socket.
+MPV_OPTS="--title=mpvpaperhyprlock --no-config --hwdec=auto --panscan=1 volume=100 --loop --loop-playlist shuffle --input-ipc-server=$IPC_SOCKET"
 
 # Effect selector.
 if [[ "$SKIP_EFFECTS" == false ]]; then
@@ -230,7 +252,7 @@ if [[ "$SKIP_EFFECTS" == false ]]; then
 
         [[ -n "$CHOICE" ]] || break
 
-        EFFECT=$(printf '%s\n' "$CHOICE" | sed 's/^\[[ x]\] //')
+        EFFECT="$(printf '%s\n' "$CHOICE" | sed 's/^\[[ x]\] //')"
 
         case "$EFFECT" in
             "None")
@@ -267,7 +289,6 @@ if [[ "$SKIP_EFFECTS" == false ]]; then
     for EFFECT in "${SELECTED_EFFECTS[@]}"; do
         case "$EFFECT" in
             "Color Up")
-                MPV_OPTS="$MPV_OPTS --input-ipc-server=/tmp/mpvlock-socket"
                 USE_IPC=true
                 ;;
 
@@ -286,18 +307,24 @@ if [[ "$SKIP_EFFECTS" == false ]]; then
     done
 fi
 
-# Add mirror filter.
+# Load the mirror shader through mpv's GPU renderer when requested.
+# Use glsl-shaders (set) rather than glsl-shader (append), because mpvpaper
+# loads its options file twice during initialization.
 if [[ "$USE_MIRROR" == true ]]; then
-    VIDEO_FILTER="$VIDEO_FILTER,hflip"
-fi
+    if [[ ! -r "$MIRROR_SHADER" ]]; then
+        printf '[ERROR] Mirror shader is missing or unreadable: %s\n' "$MIRROR_SHADER" >&2
+        exit 1
+    fi
 
-# Add final video filter.
-MPV_OPTS="$MPV_OPTS --vf=$VIDEO_FILTER"
+    MPV_OPTS="$MPV_OPTS --glsl-shaders=\"$MIRROR_SHADER\""
+fi
 
 # Stop previous wallpaper.
 if [[ -f "$PID_FILE" ]]; then
-    OLD_PID=$(cat "$PID_FILE")
-    kill "$OLD_PID" 2>/dev/null || true
+    OLD_PID="$(cat -- "$PID_FILE")"
+    if [[ "$OLD_PID" =~ ^[0-9]+$ ]]; then
+        kill "$OLD_PID" 2>/dev/null || true
+    fi
     rm -f -- "$PID_FILE"
 fi
 
@@ -313,26 +340,40 @@ sleep 0.5
 
 hyprctl dispatch "hl.dsp.focus({ workspace = 21 })"
 
-# Remove old IPC socket.
-rm -f /tmp/mpvlock-socket
+sleep 0.5
 
-# Start wallpaper.
-mpvpaper -o "$MPV_OPTS" "$MONITOR" "$VIDEO" -f &
+# Pause wallpaper after 10 seconds.
+(
+    printf '{"command":["set_property","pause",true]}\n' |
+        socat - UNIX-CONNECT:/tmp/mpv-socket >/dev/null 2>&1
+) &
 
 sleep 0.5
 
-PID=$(pgrep -f 'mpv.*mpvpaperhyprlock' | head -n 1)
+# Remove the old IPC socket before starting mpvpaper.
+rm -f -- "$IPC_SOCKET"
+
+# Start wallpaper.
+mpvpaper -o "$MPV_OPTS" "$MONITOR" "$VIDEO" -f &
+MPVPAPER_LAUNCH_PID=$!
+
+sleep 0.5
+
+PID="$(pgrep -f 'mpv.*mpvpaperhyprlock' | head -n 1 || true)"
+if [[ -z "$PID" ]]; then
+    PID="$MPVPAPER_LAUNCH_PID"
+fi
 echo "$PID" > "$PID_FILE"
 
 : > /tmp/lockscreenstyle.log
 
-# Apply saturation if IPC is enabled.
+# Apply saturation if Color Up is enabled.
 if [[ "$USE_IPC" == true ]]; then
     sleep 0.5
 
-    if [[ -S /tmp/mpvlock-socket ]]; then
-        echo '{ "command": ["set_property", "saturation", 70] }' |
-            socat - /tmp/mpvlock-socket
+    if [[ -S "$IPC_SOCKET" ]]; then
+        printf '{ "command": ["set_property", "saturation", 70] }\n' |
+            socat - "UNIX-CONNECT:$IPC_SOCKET"
     fi
 fi
 
@@ -384,17 +425,17 @@ fi
 
 # Start hyprlock.
 stdbuf -oL -eL hyprlock >> /tmp/lockscreenstyle.log 2>&1 &
-
 HYPRLOCK_PID=$!
 
 echo "[INFO] $(date '+%F %T') Starting hyprlock..." >> "$LOG"
 
-LOCK_START=$(date +%s)
+LOCK_START="$(date +%s)"
 
 wait "$HYPRLOCK_PID"
 STATUS=$?
 
 # Cleanup.
+
 if [[ -n "$KITTY_AUDIO_PID" ]]; then
     kill "$KITTY_AUDIO_PID" 2>/dev/null || true
 fi
@@ -404,12 +445,17 @@ if [[ -n "$KITTY_OVERLAY_PID" ]]; then
 fi
 
 if [[ -f "$PID_FILE" ]]; then
-    kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    WALLPAPER_PID="$(cat -- "$PID_FILE")"
+    if [[ "$WALLPAPER_PID" =~ ^[0-9]+$ ]]; then
+        kill "$WALLPAPER_PID" 2>/dev/null || true
+    fi
     rm -f -- "$PID_FILE"
 fi
 
+rm -f -- "$IPC_SOCKET"
+
 # Calculate lock duration.
-LOCK_END=$(date +%s)
+LOCK_END="$(date +%s)"
 LOCK_DURATION=$((LOCK_END - LOCK_START))
 
 # Format duration as HH:MM:SS.
@@ -417,7 +463,7 @@ HOURS=$((LOCK_DURATION / 3600))
 MINUTES=$(((LOCK_DURATION % 3600) / 60))
 SECONDS=$((LOCK_DURATION % 60))
 
-LOCK_DURATION_FMT=$(printf '%02d:%02d:%02d' "$HOURS" "$MINUTES" "$SECONDS")
+LOCK_DURATION_FMT="$(printf '%02d:%02d:%02d' "$HOURS" "$MINUTES" "$SECONDS")"
 
 echo "[INFO] $(date '+%F %T') hyprlock exited with status $STATUS" >> "$LOG"
 echo "[INFO] $(date '+%F %T') Lock duration: ${LOCK_DURATION_FMT} (${LOCK_DURATION}s)" >> "$LOG"

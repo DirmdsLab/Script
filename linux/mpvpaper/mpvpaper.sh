@@ -9,7 +9,7 @@ CACHE_DIR="/tmp/hypr-mpv_tmp"
 SOCKET_PATH="/tmp/mpv-socket"
 OUTPUT_NAME="DP-1"
 
-BASE_OPTS="--no-config --vf=scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps=60 volume=40 input-ipc-server=$SOCKET_PATH"
+BASE_OPTS="--no-config --hwdec=auto --panscan=1 volume=40 input-ipc-server=$SOCKET_PATH"
 
 # Determine the playback type from a file extension.
 get_media_type() {
